@@ -1,0 +1,7 @@
+annotations/
+tools/
+train/
+val/
+classes.json
+best.pth
+__pycache__
