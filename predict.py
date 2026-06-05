@@ -224,13 +224,16 @@ def main():
 
     checkpoint = torch.load(args.checkpoint, map_location=device,
                             weights_only=False)
-    if 'model' in checkpoint:
+    if 'ema' in checkpoint:
+        model.load_state_dict(checkpoint['ema'])
+    elif 'model' in checkpoint:
         model.load_state_dict(checkpoint['model'])
-        # Use img_size from checkpoint if available
-        if 'img_size' in checkpoint and args.img_size == 416:
-            args.img_size = checkpoint['img_size']
     else:
         model.load_state_dict(checkpoint)
+        
+    # Use img_size from checkpoint if available
+    if 'img_size' in checkpoint and args.img_size == 416:
+        args.img_size = checkpoint['img_size']
 
     model.eval()
     print(f'Loaded model from {args.checkpoint}')

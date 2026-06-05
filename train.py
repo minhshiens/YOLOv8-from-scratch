@@ -20,9 +20,12 @@ import os
 import subprocess
 import sys
 import time
+import copy
+import random
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from model import FCOSDetector
@@ -30,6 +33,26 @@ from model.loss import FCOSLoss
 from utils.box_utils import generate_grid_points, ltrb_to_xyxy
 from utils.dataset import DetectionDataset, collate_fn
 from utils.nms import per_class_nms
+
+class ModelEMA:
+    """ Exponential Moving Average of model weights """
+    def __init__(self, model, decay=0.9999):
+        self.ema = copy.deepcopy(model).eval()
+        self.updates = 0
+        self.decay = lambda x: decay * (1 - math.exp(-x / 2000))
+        for p in self.ema.parameters():
+            p.requires_grad_(False)
+
+    def update(self, model):
+        with torch.no_grad():
+            self.updates += 1
+            d = self.decay(self.updates)
+            msd = model.state_dict()
+            for k, v in self.ema.state_dict().items():
+                if v.dtype.is_floating_point:
+                    v *= d
+                    v += (1 - d) * msd[k].detach()
+
 
 
 # ---------------------------------------------------------------------------
@@ -81,7 +104,7 @@ def parse_args():
 # Training loop
 # ---------------------------------------------------------------------------
 
-def train_one_epoch(model, criterion, optimizer, dataloader, device, epoch):
+def train_one_epoch(model, criterion, optimizer, ema, dataloader, device, epoch, multi_scale=True):
     """Train for one epoch. Returns averaged loss metrics."""
     model.train()
 
@@ -93,6 +116,15 @@ def train_one_epoch(model, criterion, optimizer, dataloader, device, epoch):
 
     for batch_idx, (images, targets) in enumerate(dataloader):
         images = images.to(device)
+
+        # Multi-scale training
+        if multi_scale:
+            sz = random.choice(range(320, 672, 32))
+            if sz != images.shape[2]:
+                scale = sz / images.shape[2]
+                images = F.interpolate(images, size=(sz, sz), mode='bilinear', align_corners=False)
+                for t in targets:
+                    t['boxes'] = t['boxes'] * scale
 
         # Forward pass
         predictions = model(images)
@@ -106,6 +138,9 @@ def train_one_epoch(model, criterion, optimizer, dataloader, device, epoch):
         nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
 
         optimizer.step()
+
+        if ema is not None:
+            ema.update(model)
 
         # Accumulate metrics
         running_loss += losses['total'].item()
@@ -330,6 +365,9 @@ def main():
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f'Model parameters: {total_params:,} total, {trainable_params:,} trainable')
 
+    # ---- EMA ----
+    ema = ModelEMA(model)
+
     # ---- Loss ----
     criterion = FCOSLoss(num_classes=5)
 
@@ -355,6 +393,8 @@ def main():
     if args.resume and os.path.exists(args.resume):
         ckpt = torch.load(args.resume, map_location=device, weights_only=False)
         model.load_state_dict(ckpt['model'])
+        if 'ema' in ckpt:
+            ema.ema.load_state_dict(ckpt['ema'])
         optimizer.load_state_dict(ckpt['optimizer'])
         start_epoch = ckpt.get('epoch', -1) + 1
         best_map = ckpt.get('best_map', 0.0)
@@ -378,7 +418,8 @@ def main():
         # ---- Train ----
         t0 = time.time()
         metrics = train_one_epoch(
-            model, criterion, optimizer, train_loader, device, epoch + 1,
+            model, criterion, optimizer, ema, train_loader, device, epoch + 1,
+            multi_scale=True
         )
         train_time = time.time() - t0
 
@@ -395,7 +436,7 @@ def main():
         if do_val:
             print('  Validating...')
             t0 = time.time()
-            val_preds = validate(model, val_loader, device)
+            val_preds = validate(ema.ema, val_loader, device)
             val_time = time.time() - t0
 
             # Save predictions JSON
@@ -419,6 +460,7 @@ def main():
                     best_path = os.path.join(args.checkpoint_dir, 'best.pth')
                     torch.save({
                         'model': model.state_dict(),
+                        'ema': ema.ema.state_dict(),
                         'optimizer': optimizer.state_dict(),
                         'epoch': epoch,
                         'best_map': best_map,
@@ -432,6 +474,7 @@ def main():
         latest_path = os.path.join(args.checkpoint_dir, 'latest.pth')
         torch.save({
             'model': model.state_dict(),
+            'ema': ema.ema.state_dict(),
             'optimizer': optimizer.state_dict(),
             'epoch': epoch,
             'best_map': best_map,
