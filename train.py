@@ -275,11 +275,14 @@ def validate(model, dataloader, device, conf_thresh=0.05, nms_thresh=0.5):
 
                 for i in range(len(kb)):
                     if valid[i]:
-                        det_boxes.append({
-                            'class': classes[kl[i].item()],
-                            'confidence': round(ks[i].item(), 4),
-                            'bbox': [round(v, 1) for v in kb[i].tolist()],
-                        })
+                        bbox = [round(v, 3) for v in kb[i].tolist()]
+                        # Check validity again after rounding
+                        if bbox[2] > bbox[0] and bbox[3] > bbox[1]:
+                            det_boxes.append({
+                                'class': classes[kl[i].item()],
+                                'confidence': round(ks[i].item(), 4),
+                                'bbox': bbox,
+                            })
 
             all_predictions.append({
                 'image_id': targets[b]['image_id'],

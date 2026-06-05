@@ -192,11 +192,14 @@ def predict_single_image(model, image_path, transform, device,
     # Format output
     results = []
     for i in range(len(keep_boxes)):
-        results.append({
-            'class': CLASSES[keep_labels[i].item()],
-            'confidence': round(keep_scores[i].item(), 4),
-            'bbox': [round(v, 1) for v in keep_boxes[i].tolist()],
-        })
+        bbox = [round(v, 3) for v in keep_boxes[i].tolist()]
+        # Check validity again after rounding
+        if bbox[2] > bbox[0] and bbox[3] > bbox[1]:
+            results.append({
+                'class': CLASSES[keep_labels[i].item()],
+                'confidence': round(keep_scores[i].item(), 4),
+                'bbox': bbox,
+            })
 
     return results
 
