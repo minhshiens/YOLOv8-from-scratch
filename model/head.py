@@ -195,6 +195,7 @@ class FCOSHead(nn.Module):
                 ctr_logits: (B, 1, H, W) — raw centerness logit
         """
         results = []
+        strides = [8, 16, 32]
         for level_idx, feature in enumerate(features):
             # Classification branch
             cls_feat = self.cls_subnet(feature)
@@ -202,8 +203,9 @@ class FCOSHead(nn.Module):
 
             # Regression branch
             reg_feat = self.reg_subnet(feature)
-            # Scale then ReLU to ensure positive distances
-            reg_pred = F.relu(self.scales[level_idx] * self.reg_pred(reg_feat))
+            # Use exp() and multiply by stride as in the original FCOS paper
+            # This prevents dead gradients from ReLU and helps predict reasonable initial sizes
+            reg_pred = torch.exp(self.scales[level_idx] * self.reg_pred(reg_feat)) * strides[level_idx]
 
             # Centerness branch (uses regression features)
             ctr_logits = self.centerness(reg_feat)
