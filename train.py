@@ -298,9 +298,29 @@ def evaluate_predictions(val_data_path, pred_path, output_path):
 
     Returns the mAP@0.5 score, or None if evaluation fails.
     """
+    # Attempt to find evaluate_predictions.py dynamically
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    val_dir = os.path.dirname(os.path.abspath(val_data_path))
+    
+    # Possible paths:
+    # 1. Relative to current working dir
+    # 2. Relative to val_data_path (e.g., val_data is .../public/annotations/val.json)
+    # 3. Relative to train.py script
+    possible_paths = [
+        'public/tools/evaluate_predictions.py',
+        os.path.join(os.path.dirname(val_dir), 'tools', 'evaluate_predictions.py'),
+        os.path.join(script_dir, 'public', 'tools', 'evaluate_predictions.py')
+    ]
+    
+    tool_path = 'public/tools/evaluate_predictions.py' # default
+    for p in possible_paths:
+        if os.path.exists(p):
+            tool_path = p
+            break
+
     try:
         result = subprocess.run(
-            [sys.executable, 'public/tools/evaluate_predictions.py',
+            [sys.executable, tool_path,
              '--ground_truth', val_data_path,
              '--predictions', pred_path,
              '--output', output_path],
