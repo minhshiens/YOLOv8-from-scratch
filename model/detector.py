@@ -27,8 +27,8 @@ Architecture overview:
 import torch
 import torch.nn as nn
 
-from model.backbone import ResNet18Backbone
-from model.head import FPN, FCOSHead
+from model.backbone import ResNet34Backbone
+from model.head import PANet, FCOSHead
 
 
 class FCOSDetector(nn.Module):
@@ -36,8 +36,8 @@ class FCOSDetector(nn.Module):
     FCOS (Fully Convolutional One-Stage) Object Detector.
 
     Combines:
-    - ResNet-50 backbone for multi-scale feature extraction
-    - FPN for building top-down feature pyramid
+    - ResNet-34 backbone for multi-scale feature extraction
+    - PANet for building top-down and bottom-up feature pyramid
     - FCOS head for dense per-pixel predictions
     """
 
@@ -45,20 +45,20 @@ class FCOSDetector(nn.Module):
         """
         Args:
             num_classes: number of object classes (5 for this dataset)
-            pretrained_backbone: if True, load ImageNet weights for ResNet-50
-            fpn_channels: number of channels in FPN (default 256)
+            pretrained_backbone: if True, load ImageNet weights for ResNet-34
+            fpn_channels: number of channels in PANet (default 256)
         """
         super().__init__()
         self.num_classes = num_classes
         self.strides = [8, 16, 32]  # FPN level strides
 
-        # Backbone: ResNet-18
-        self.backbone = ResNet18Backbone(pretrained=pretrained_backbone)
+        # Backbone: ResNet-34 → outputs C3 (128ch), C4 (256ch), C5 (512ch)
+        self.backbone = ResNet34Backbone(pretrained=pretrained_backbone)
 
-        # FPN: reduces all features to fpn_channels (256)
-        self.fpn = FPN(
-            in_channels_list=self.backbone.out_channels,  # [128, 256, 512]
-            out_channels=fpn_channels,
+        # PANet: reduces all features to fpn_channels (256) and aggregates
+        self.panet = PANet(
+            in_channels_list=self.backbone.out_channels,
+            out_channels=fpn_channels
         )
 
         # FCOS detection head (shared across all FPN levels)
@@ -88,7 +88,7 @@ class FCOSDetector(nn.Module):
         c3, c4, c5 = self.backbone(images)
 
         # Build top-down feature pyramid
-        features = self.fpn(c3, c4, c5)  # [P3, P4, P5]
+        features = self.panet(c3, c4, c5)  # [P3, P4, P5]
 
         # Run shared detection head on each FPN level
         predictions = self.head(features)

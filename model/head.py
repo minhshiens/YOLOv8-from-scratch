@@ -20,9 +20,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class FPN(nn.Module):
+class PANet(nn.Module):
     """
-    Feature Pyramid Network (FPN).
+    Path Aggregation Network (PANet).
 
     Builds a top-down feature pyramid from backbone outputs:
         C5 → P5 (stride 32)
@@ -52,6 +52,20 @@ class FPN(nn.Module):
         self.smooth_p3 = nn.Conv2d(out_channels, out_channels, 3, padding=1)
         self.smooth_p4 = nn.Conv2d(out_channels, out_channels, 3, padding=1)
         self.smooth_p5 = nn.Conv2d(out_channels, out_channels, 3, padding=1)
+
+        # Bottom-up downsample convolutions (PANet) with BatchNorm to prevent explosion
+        self.downsample_n3 = nn.Sequential(
+            nn.Conv2d(out_channels, out_channels, 3, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(out_channels)
+        )
+        self.downsample_n4 = nn.Sequential(
+            nn.Conv2d(out_channels, out_channels, 3, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(out_channels)
+        )
+        
+        # Bottom-up smooth convolutions
+        self.smooth_n4 = nn.Conv2d(out_channels, out_channels, 3, padding=1)
+        self.smooth_n5 = nn.Conv2d(out_channels, out_channels, 3, padding=1)
 
         self._init_weights()
 
@@ -88,7 +102,15 @@ class FPN(nn.Module):
         p4 = self.smooth_p4(p4)
         p5 = self.smooth_p5(p5)
 
-        return [p3, p4, p5]
+        # Bottom-up pathway (PANet)
+        n3 = p3
+        n4 = p4 + self.downsample_n3(n3)
+        n4 = self.smooth_n4(n4)
+        
+        n5 = p5 + self.downsample_n4(n4)
+        n5 = self.smooth_n5(n5)
+
+        return [n3, n4, n5]
 
 
 class FCOSHead(nn.Module):

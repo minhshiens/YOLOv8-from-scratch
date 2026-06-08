@@ -158,7 +158,7 @@ class FCOSLoss(nn.Module):
                 cls_targets, reg_targets, ctr_targets, pos_mask = \
                     self._assign_targets_for_level(
                         points, gt_boxes, gt_labels,
-                        scale_min, scale_max, device
+                        scale_min, scale_max, device, stride
                     )
 
                 num_pos = pos_mask.sum().item()
@@ -207,7 +207,7 @@ class FCOSLoss(nn.Module):
 
     @torch.no_grad()
     def _assign_targets_for_level(self, points, gt_boxes, gt_labels,
-                                  scale_min, scale_max, device):
+                                  scale_min, scale_max, device, stride):
         """
         FCOS target assignment for one image at one FPN level.
 
@@ -225,6 +225,7 @@ class FCOSLoss(nn.Module):
             gt_labels: (N,) class indices
             scale_min, scale_max: scale range for this FPN level
             device: torch device
+            stride: spatial stride of this FPN level
 
         Returns:
             cls_targets: (HW, num_classes) one-hot classification targets
@@ -250,12 +251,26 @@ class FCOSLoss(nn.Module):
         # ---- Condition 1: point must be inside the GT box ----
         inside_mask = ltrb.min(dim=-1).values > 0  # (HW, N)
 
-        # ---- Condition 2: max distance must be within scale range ----
+        # ---- Condition 2: Center Sampling (point must be near GT center) ----
+        radius = 2.5
+        gt_cx = (gt_boxes[:, 0] + gt_boxes[:, 2]) / 2.0  # (N,)
+        gt_cy = (gt_boxes[:, 1] + gt_boxes[:, 3]) / 2.0  # (N,)
+        
+        # Calculate ltrb distances from points to the center bounding box
+        center_l = points_x - (gt_cx[None, :] - radius * stride)
+        center_t = points_y - (gt_cy[None, :] - radius * stride)
+        center_r = (gt_cx[None, :] + radius * stride) - points_x
+        center_b = (gt_cy[None, :] + radius * stride) - points_y
+        
+        center_ltrb = torch.stack([center_l, center_t, center_r, center_b], dim=-1)
+        center_mask = center_ltrb.min(dim=-1).values > 0  # (HW, N)
+
+        # ---- Condition 3: max distance must be within scale range ----
         max_dist = ltrb.max(dim=-1).values  # (HW, N)
         scale_mask = (max_dist >= scale_min) & (max_dist <= scale_max)
 
         # ---- Combined validity ----
-        valid_mask = inside_mask & scale_mask  # (HW, N)
+        valid_mask = inside_mask & center_mask & scale_mask  # (HW, N)
 
         # ---- Resolve multi-assignment: pick smallest GT box area ----
         gt_areas = (gt_boxes[:, 2] - gt_boxes[:, 0]) * \

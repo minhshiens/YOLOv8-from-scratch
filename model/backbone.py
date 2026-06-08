@@ -193,6 +193,107 @@ class ResNet18Backbone(nn.Module):
         return c3, c4, c5
 
 
+class ResNet34Backbone(nn.Module):
+    """
+    ResNet-34 backbone that extracts multi-scale features.
+
+    Architecture (Blocks [3, 4, 6, 3]):
+        Stem:   Conv7x7(s=2) → BN → ReLU → MaxPool(s=2)    → stride 4
+        Layer1: 3x BasicBlock(64→64, s=1)                  → stride 4
+        Layer2: 4x BasicBlock(64→128, s=2)    [C3 output]  → stride 8
+        Layer3: 6x BasicBlock(128→256, s=2)   [C4 output]  → stride 16
+        Layer4: 3x BasicBlock(256→512, s=2)   [C5 output]  → stride 32
+
+    Returns (C3, C4, C5) feature maps for use with FPN/PANet.
+    """
+
+    def __init__(self, pretrained=True):
+        super().__init__()
+        self.in_channels = 64
+
+        # ---- Stem ----
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.bn1 = nn.BatchNorm2d(64)
+        self.relu = nn.ReLU(inplace=True)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+
+        # ---- Residual layers ----
+        self.layer1 = self._make_layer(BasicBlock, 64, num_blocks=3, stride=1)    # stride 4
+        self.layer2 = self._make_layer(BasicBlock, 128, num_blocks=4, stride=2)   # stride 8
+        self.layer3 = self._make_layer(BasicBlock, 256, num_blocks=6, stride=2)   # stride 16
+        self.layer4 = self._make_layer(BasicBlock, 512, num_blocks=3, stride=2)   # stride 32
+
+        # Output channel dimensions for FPN/PANet (C3, C4, C5)
+        self.out_channels = [128, 256, 512]
+
+        # Initialize weights from scratch
+        self._init_weights()
+
+        # Optionally load pretrained ImageNet weights
+        if pretrained:
+            self._load_pretrained()
+
+    def _make_layer(self, block, out_channels, num_blocks, stride):
+        downsample = None
+        if stride != 1 or self.in_channels != out_channels * block.expansion:
+            downsample = nn.Sequential(
+                nn.Conv2d(
+                    self.in_channels, out_channels * block.expansion,
+                    kernel_size=1, stride=stride, bias=False
+                ),
+                nn.BatchNorm2d(out_channels * block.expansion),
+            )
+
+        layers = []
+        layers.append(block(self.in_channels, out_channels, stride, downsample))
+        self.in_channels = out_channels * block.expansion
+        for _ in range(1, num_blocks):
+            layers.append(block(self.in_channels, out_channels))
+
+        return nn.Sequential(*layers)
+
+    def _init_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+    def _load_pretrained(self):
+        try:
+            from torchvision.models import resnet34, ResNet34_Weights
+            pretrained_model = resnet34(weights=ResNet34_Weights.DEFAULT)
+        except (ImportError, AttributeError):
+            from torchvision.models import resnet34
+            pretrained_model = resnet34(pretrained=True)
+
+        pretrained_dict = pretrained_model.state_dict()
+        own_dict = self.state_dict()
+
+        matched = {
+            k: v for k, v in pretrained_dict.items()
+            if k in own_dict and v.shape == own_dict[k].shape
+        }
+
+        own_dict.update(matched)
+        self.load_state_dict(own_dict)
+        print(f"[Backbone] Loaded {len(matched)}/{len(own_dict)} pretrained ResNet-34 weights")
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        c2 = self.layer1(x)
+        c3 = self.layer2(c2)
+        c4 = self.layer3(c3)
+        c5 = self.layer4(c4)
+
+        return c3, c4, c5
+
+
 class ResNet50Backbone(nn.Module):
     """
     ResNet-50 backbone that extracts multi-scale features.
