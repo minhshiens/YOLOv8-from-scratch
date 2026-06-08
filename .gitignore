@@ -2,6 +2,5 @@ annotations/
 tools/
 train/
 val/
-classes.json
-best.pth
 __pycache__
+models/best.pth

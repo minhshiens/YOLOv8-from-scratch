@@ -35,7 +35,7 @@ import numpy as np
 import torch
 from PIL import Image
 
-from model import FCOSDetector
+from models import FCOSDetector
 from utils.box_utils import generate_grid_points, ltrb_to_xyxy
 from utils.nms import per_class_nms
 from utils.transforms import DetectionTransform
@@ -56,9 +56,9 @@ def parse_args():
                         help='Path to model checkpoint')
     parser.add_argument('--img_size', type=int, default=416,
                         help='Input image size (must match training)')
-    parser.add_argument('--conf_thresh', type=float, default=0.3,
+    parser.add_argument('--conf_thresh', type=float, default=0.05,
                         help='Confidence threshold for filtering')
-    parser.add_argument('--nms_thresh', type=float, default=0.5,
+    parser.add_argument('--nms_thresh', type=float, default=0.4,
                         help='IoU threshold for NMS')
     parser.add_argument('--device', type=str, default=None,
                         help='Device to use (cuda/cpu, auto-detected if omitted)')

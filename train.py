@@ -28,8 +28,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
-from model import FCOSDetector
-from model.loss import FCOSLoss
+from models import FCOSDetector
+from models.loss import FCOSLoss
 from utils.box_utils import generate_grid_points, ltrb_to_xyxy
 from utils.dataset import DetectionDataset, collate_fn
 from utils.nms import per_class_nms
@@ -462,13 +462,17 @@ def main():
             val_preds = validate(ema.ema, val_loader, device)
             val_time = time.time() - t0
 
+            # Make sure results directory exists
+            results_dir = os.path.join(args.checkpoint_dir, 'results')
+            os.makedirs(results_dir, exist_ok=True)
+
             # Save predictions JSON
-            pred_path = os.path.join(args.checkpoint_dir, 'val_predictions.json')
+            pred_path = os.path.join(results_dir, 'val_predictions.json')
             with open(pred_path, 'w', encoding='utf-8') as f:
                 json.dump(val_preds, f, ensure_ascii=False)
 
             # Compute mAP using the provided evaluation script
-            score_path = os.path.join(args.checkpoint_dir, 'val_score.json')
+            score_path = os.path.join(results_dir, 'val_score.json')
             score = evaluate_predictions(args.val_data, pred_path, score_path)
 
             if score is not None:

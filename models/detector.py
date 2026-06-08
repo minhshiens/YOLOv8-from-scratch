@@ -27,8 +27,8 @@ Architecture overview:
 import torch
 import torch.nn as nn
 
-from model.backbone import ResNet34Backbone
-from model.head import PANet, FCOSHead
+from models.backbone import ResNet50Backbone
+from models.head import PANet, FCOSHead
 
 
 class FCOSDetector(nn.Module):
@@ -52,8 +52,8 @@ class FCOSDetector(nn.Module):
         self.num_classes = num_classes
         self.strides = [8, 16, 32]  # FPN level strides
 
-        # Backbone: ResNet-34 → outputs C3 (128ch), C4 (256ch), C5 (512ch)
-        self.backbone = ResNet34Backbone(pretrained=pretrained_backbone)
+        # Backbone: ResNet-50 → outputs C3 (512ch), C4 (1024ch), C5 (2048ch)
+        self.backbone = ResNet50Backbone(pretrained=pretrained_backbone)
 
         # PANet: reduces all features to fpn_channels (256) and aggregates
         self.panet = PANet(
