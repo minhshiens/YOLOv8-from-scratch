@@ -10,7 +10,37 @@ Toàn bộ mã nguồn được lập trình bằng PyTorch thuần túy (tuyệ
 - **Cổ chai đặc trưng (Neck):** Feature Pyramid Network (PANet) đa tỷ lệ nối các Feature map P3, P4, P5.
 - **Đầu dự đoán (Decoupled Head):** Tách biệt nhánh dự đoán phân lớp (Classification), hộp bao (Regression) và độ lệch tâm (Centerness) giúp giảm nhiễu.
 - **Hàm mất mát (Loss):** Sử dụng Focal Loss (chống mất cân bằng dữ liệu foreground/background), GIoU Loss (tối ưu overlap hộp bao), và BCE Loss (cho Centerness).
-- **"Ma thuật" Hậu xử lý (Post-processing Boost):** Tích hợp Test-Time Augmentation (TTA) lật ngang ảnh và Centerness Penalty ($scores = cls \times ctr^2$) để triệt tiêu nhiễu (False Positives), tối đa hóa độ chuẩn xác (Precision) lúc suy luận mà không cần train lại.
+- **Hậu xử lý (Post-processing):** Tích hợp Test-Time Augmentation (TTA) lật ngang ảnh và Centerness Penalty ($scores = cls \times ctr^2$) để triệt tiêu nhiễu (False Positives), tối đa hóa độ chuẩn xác (Precision) lúc suy luận mà không cần train lại.
+
+## Sơ đồ Kiến trúc (Architecture)
+
+```mermaid
+graph LR
+    Input["Input Image"] --> Backbone["ResNet-50 Backbone"]
+    
+    subgraph Neck["Feature Pyramid Network (Neck)"]
+        Backbone --> C3["C3 (Stride 8)"]
+        Backbone --> C4["C4 (Stride 16)"]
+        Backbone --> C5["C5 (Stride 32)"]
+        
+        C5 --> P5["P5"]
+        C4 --> P4["P4"]
+        C3 --> P3["P3"]
+        
+        P5 -. "Upsample & Add" .-> P4
+        P4 -. "Upsample & Add" .-> P3
+    end
+    
+    subgraph Head["FCOS Decoupled Head (Per Level)"]
+        P3 --> Shared["Shared Convolutions"]
+        P4 --> Shared
+        P5 --> Shared
+        
+        Shared --> Cls["Classification Branch<br>(H x W x 5 classes)"]
+        Shared --> Ctr["Centerness Branch<br>(H x W x 1 score)"]
+        Shared --> Reg["Regression Branch<br>(H x W x 4 coords)"]
+    end
+```
 
 ---
 

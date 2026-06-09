@@ -1,6 +1,6 @@
-annotations/
-tools/
-train/
-val/
-__pycache__
-models/best.pth
+public/
+models/*.pth
+__pycache__/
+*.json
+!predictions.json
+!score.json
