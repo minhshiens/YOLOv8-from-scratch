@@ -1,60 +1,21 @@
-"""
-Data augmentation and preprocessing transforms for object detection.
-
-All transforms handle both images AND bounding boxes consistently.
-Key design decisions:
-- Letterbox resize (preserves aspect ratio with gray padding)
-- ImageNet normalization (for pretrained backbone compatibility)
-- Augmentations only applied during training
-"""
-
 import random
 import numpy as np
 import torch
 from PIL import Image, ImageEnhance
 
-
 class DetectionTransform:
-    """
-    Transform pipeline for object detection.
-
-    Training augmentations:
-    - Random horizontal flip (50% probability)
-    - Random color jitter (brightness, contrast, saturation)
-
-    Always applied:
-    - Letterbox resize to target size (aspect-ratio preserving)
-    - Normalize with ImageNet mean/std
-    """
 
     # ImageNet statistics (used because backbone is pretrained on ImageNet)
     MEAN = [0.485, 0.456, 0.406]
     STD = [0.229, 0.224, 0.225]
 
     def __init__(self, img_size=416, train=True):
-        """
-        Args:
-            img_size: target image size (square)
-            train: if True, apply data augmentation
-        """
+        
         self.img_size = img_size
         self.train = train
 
     def __call__(self, image, boxes, labels):
-        """
-        Apply transforms to image and bounding boxes.
-
-        Args:
-            image: PIL Image (RGB)
-            boxes: numpy array (N, 4) in [xmin, ymin, xmax, ymax] on original image
-            labels: numpy array (N,) of class indices
-
-        Returns:
-            image_tensor: (3, img_size, img_size) normalized float tensor
-            boxes_tensor: (N, 4) tensor in xyxy format on the resized image
-            labels_tensor: (N,) long tensor of class indices
-            meta: dict with {'scale', 'pad_x', 'pad_y', 'orig_w', 'orig_h'}
-        """
+        
         orig_w, orig_h = image.size
 
         # ---- Training augmentations ----
@@ -92,13 +53,7 @@ class DetectionTransform:
     # ------------------------------------------------------------------
 
     def _random_horizontal_flip(self, image, boxes, orig_w, prob=0.5):
-        """
-        Randomly flip image and boxes horizontally.
-
-        When flipping, x-coordinates transform as:
-            new_xmin = orig_w - old_xmax
-            new_xmax = orig_w - old_xmin
-        """
+        
         if random.random() < prob:
             image = image.transpose(Image.FLIP_LEFT_RIGHT)
             if len(boxes) > 0:
@@ -110,7 +65,7 @@ class DetectionTransform:
         return image, boxes
 
     def _random_color_jitter(self, image, prob=0.5):
-        """Apply random brightness, contrast, and saturation changes."""
+        
         if random.random() < prob:
             # Brightness: scale pixel values
             factor = random.uniform(0.6, 1.4)
@@ -131,27 +86,7 @@ class DetectionTransform:
     # ------------------------------------------------------------------
 
     def _letterbox_resize(self, image, boxes, target_size):
-        """
-        Resize image with padding to preserve aspect ratio (letterbox).
-
-        Steps:
-        1. Compute scale factor to fit image in target_size x target_size
-        2. Resize image proportionally
-        3. Pad shorter dimension with gray (114, 114, 114)
-        4. Adjust bounding box coordinates accordingly
-
-        Args:
-            image: PIL Image
-            boxes: (N, 4) numpy array in xyxy format
-            target_size: int, target square size
-
-        Returns:
-            padded_image: PIL Image of size (target_size, target_size)
-            adjusted_boxes: (N, 4) numpy array in xyxy on the padded image
-            scale: float scale factor applied
-            pad_x: int horizontal padding offset
-            pad_y: int vertical padding offset
-        """
+        
         orig_w, orig_h = image.size
         scale = min(target_size / orig_w, target_size / orig_h)
         new_w = int(orig_w * scale)
@@ -177,14 +112,7 @@ class DetectionTransform:
         return padded, boxes, scale, pad_x, pad_y
 
     def _to_normalized_tensor(self, image):
-        """
-        Convert PIL Image to normalized tensor.
-
-        Steps:
-        1. Convert to float32 numpy array in [0, 1]
-        2. Transpose from (H, W, C) to (C, H, W)
-        3. Normalize with ImageNet mean and std
-        """
+        
         arr = np.array(image, dtype=np.float32) / 255.0  # (H, W, 3)
         tensor = torch.from_numpy(arr).permute(2, 0, 1)  # (3, H, W)
 

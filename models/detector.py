@@ -1,53 +1,13 @@
-"""
-FCOS Object Detector — assembles backbone, FPN, and detection head.
-
-Architecture overview:
-    Input Image (B, 3, 416, 416)
-         │
-    ┌────▼────┐
-    │ ResNet-18│ ← Backbone (pretrained on ImageNet)
-    │ Backbone │
-    └─┬──┬──┬─┘
-      │  │  │
-     C3 C4 C5   ← Multi-scale features (strides 8, 16, 32)
-      │  │  │
-    ┌─▼──▼──▼─┐
-    │   FPN    │ ← Feature Pyramid Network
-    └─┬──┬──┬─┘
-      │  │  │
-     P3 P4 P5   ← Unified 256-channel features
-      │  │  │
-    ┌─▼──▼──▼─┐
-    │FCOS Head │ ← Shared detection head
-    └──────────┘
-      │  │  │
-    cls reg ctr  ← Per-pixel predictions at each level
-"""
-
 import torch
 import torch.nn as nn
 
 from models.backbone import ResNet50Backbone
 from models.head import PANet, FCOSHead
 
-
 class FCOSDetector(nn.Module):
-    """
-    FCOS (Fully Convolutional One-Stage) Object Detector.
-
-    Combines:
-    - ResNet-34 backbone for multi-scale feature extraction
-    - PANet for building top-down and bottom-up feature pyramid
-    - FCOS head for dense per-pixel predictions
-    """
 
     def __init__(self, num_classes=5, pretrained_backbone=True, fpn_channels=256):
-        """
-        Args:
-            num_classes: number of object classes (5 for this dataset)
-            pretrained_backbone: if True, load ImageNet weights for ResNet-34
-            fpn_channels: number of channels in PANet (default 256)
-        """
+        
         super().__init__()
         self.num_classes = num_classes
         self.strides = [8, 16, 32]  # FPN level strides
@@ -69,21 +29,7 @@ class FCOSDetector(nn.Module):
         )
 
     def forward(self, images):
-        """
-        Forward pass.
-
-        Args:
-            images: (B, 3, H, W) normalized input image tensor
-
-        Returns:
-            list of (cls_logits, reg_pred, ctr_logits) tuples, one per FPN level:
-                cls_logits: (B, num_classes, H_l, W_l) — raw logits
-                reg_pred:   (B, 4, H_l, W_l) — positive ltrb distances
-                ctr_logits: (B, 1, H_l, W_l) — raw centerness logits
-
-            For inference, apply sigmoid to cls_logits and ctr_logits,
-            then multiply: final_score = sigmoid(cls) * sigmoid(ctr)
-        """
+        
         # Extract multi-scale backbone features
         c3, c4, c5 = self.backbone(images)
 

@@ -1,24 +1,3 @@
-"""
-Loss functions for the FCOS detector.
-
-Components:
-1. Focal Loss — Classification loss that addresses foreground/background imbalance
-2. GIoU Loss — Regression loss with better gradients than L1/L2 for box prediction
-3. BCE Loss — Centerness supervision
-
-Target Assignment:
-    For each FPN level, we determine which feature map locations are "positive"
-    (responsible for detecting an object) based on two criteria:
-    - The location must fall INSIDE a ground truth box
-    - The max(l, t, r, b) distance must be within the scale range for that level
-
-    Scale ranges ensure small objects are detected at high-resolution FPN levels
-    and large objects at low-resolution levels:
-        P3 (stride 8):  max regression distance in [0, 64]    → small objects
-        P4 (stride 16): max regression distance in [64, 128]  → medium objects
-        P5 (stride 32): max regression distance in [128, ∞]   → large objects
-"""
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -29,21 +8,7 @@ from utils.box_utils import (
     compute_giou_loss,
 )
 
-
 class FocalLoss(nn.Module):
-    """
-    Focal Loss for dense object detection.
-
-    FL(p_t) = -alpha_t * (1 - p_t)^gamma * log(p_t)
-
-    Down-weights well-classified examples so that the loss focuses
-    on hard, misclassified examples. Critical for FCOS because
-    the vast majority of locations are background (negative).
-
-    Args:
-        alpha: weighting factor for positive class (default 0.25)
-        gamma: focusing parameter — higher values focus more on hard examples
-    """
 
     def __init__(self, alpha=0.25, gamma=2.0):
         super().__init__()
@@ -51,14 +16,7 @@ class FocalLoss(nn.Module):
         self.gamma = gamma
 
     def forward(self, logits, targets):
-        """
-        Args:
-            logits: (N, C) raw classification logits
-            targets: (N, C) binary targets (1 for positive, 0 for negative)
-
-        Returns:
-            Scalar focal loss (sum over all elements)
-        """
+        
         p = torch.sigmoid(logits)
 
         # Binary cross-entropy (per element)
@@ -78,16 +36,7 @@ class FocalLoss(nn.Module):
         loss = alpha_t * focal_weight * bce
         return loss.sum()
 
-
 class FCOSLoss(nn.Module):
-    """
-    Combined loss for the FCOS detector.
-
-    Total Loss = L_cls / N_pos + λ_reg * L_reg / N_pos + L_ctr / N_pos
-
-    where N_pos is the number of positive locations across all FPN levels
-    and all images in the batch.
-    """
 
     # Scale ranges determine which FPN level is responsible for which object sizes
     SCALE_RANGES = [
@@ -105,19 +54,7 @@ class FCOSLoss(nn.Module):
         self.focal_loss = FocalLoss(alpha=0.25, gamma=2.0)
 
     def forward(self, predictions, targets):
-        """
-        Compute FCOS loss.
-
-        Args:
-            predictions: list of (cls_logits, reg_pred, ctr_logits) per FPN level
-                cls_logits: (B, C, H, W) raw classification logits
-                reg_pred:   (B, 4, H, W) positive ltrb distances
-                ctr_logits: (B, 1, H, W) raw centerness logits
-            targets: list of dicts with 'boxes' (N,4 xyxy) and 'labels' (N,)
-
-        Returns:
-            dict with keys: 'total', 'cls', 'reg', 'ctr', 'num_pos'
-        """
+        
         device = predictions[0][0].device
         batch_size = predictions[0][0].shape[0]
 
@@ -208,31 +145,7 @@ class FCOSLoss(nn.Module):
     @torch.no_grad()
     def _assign_targets_for_level(self, points, gt_boxes, gt_labels,
                                   scale_min, scale_max, device, stride):
-        """
-        FCOS target assignment for one image at one FPN level.
-
-        Algorithm:
-        1. For each point, compute (l, t, r, b) distances to every GT box
-        2. A point is valid for a GT box if:
-           a) The point is inside the box (all distances > 0)
-           b) max(l, t, r, b) is within the FPN level's scale range
-        3. If a point matches multiple GT boxes, assign the smallest-area box
-        4. Compute centerness target: sqrt(min(l,r)/max(l,r) * min(t,b)/max(t,b))
-
-        Args:
-            points: (HW, 2) grid center points [x, y]
-            gt_boxes: (N, 4) ground truth boxes [xmin, ymin, xmax, ymax]
-            gt_labels: (N,) class indices
-            scale_min, scale_max: scale range for this FPN level
-            device: torch device
-            stride: spatial stride of this FPN level
-
-        Returns:
-            cls_targets: (HW, num_classes) one-hot classification targets
-            reg_targets: (HW, 4) regression targets (l, t, r, b)
-            ctr_targets: (HW,) centerness targets in [0, 1]
-            pos_mask: (HW,) boolean mask for positive locations
-        """
+        
         num_points = points.shape[0]
         num_gt = gt_boxes.shape[0]
 

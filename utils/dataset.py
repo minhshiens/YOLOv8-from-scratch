@@ -1,16 +1,3 @@
-"""
-Dataset class for loading object detection data.
-
-Reads annotations from a COCO-like JSON format with structure:
-{
-    "classes": ["person", "car", "dog", "cat", "chair"],
-    "images": [{"id": "...", "file_name": "...", "width": ..., "height": ...}],
-    "annotations": [{"image_id": "...", "class": "...", "bbox": [x1,y1,x2,y2]}]
-}
-
-Handles multiple objects per image with a custom collate function.
-"""
-
 import json
 import os
 import numpy as np
@@ -20,27 +7,13 @@ from torch.utils.data import Dataset
 
 from utils.transforms import DetectionTransform
 
-
 class DetectionDataset(Dataset):
-    """
-    Custom dataset for object detection.
-
-    Each item returns:
-    - image_tensor: (3, H, W) normalized float tensor
-    - targets: dict with 'boxes', 'labels', 'image_id', and letterbox metadata
-    """
 
     CLASSES = ['person', 'car', 'dog', 'cat', 'chair']
     NUM_CLASSES = 5
 
     def __init__(self, annotation_path, image_dir, img_size=416, train=True):
-        """
-        Args:
-            annotation_path: path to annotation JSON file (e.g. train.json)
-            image_dir: path to the directory containing images
-            img_size: target image size for resizing
-            train: if True, enables data augmentation
-        """
+        
         self.image_dir = image_dir
         self.transform = DetectionTransform(img_size=img_size, train=train)
         self.class_to_idx = {name: i for i, name in enumerate(self.CLASSES)}
@@ -102,23 +75,8 @@ class DetectionDataset(Dataset):
 
         return image_tensor, targets
 
-
 def collate_fn(batch):
-    """
-    Custom collate function for detection batches.
-
-    Since each image can have a different number of objects,
-    we cannot simply stack targets. Instead:
-    - Images are stacked into a (B, 3, H, W) tensor
-    - Targets remain as a list of dicts
-
-    Args:
-        batch: list of (image_tensor, targets_dict) tuples
-
-    Returns:
-        images: (B, 3, H, W) tensor
-        targets: list of B dicts
-    """
+    
     images = []
     targets = []
     for img, tgt in batch:

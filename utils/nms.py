@@ -1,29 +1,8 @@
-"""
-Non-Maximum Suppression (NMS) implementation from scratch.
-
-Implements the greedy NMS algorithm:
-1. Sort detections by confidence score (descending)
-2. Pick the highest scoring detection
-3. Remove all detections with IoU > threshold with the picked detection
-4. Repeat until no detections remain
-"""
-
 import torch
 from utils.box_utils import compute_iou
 
-
 def nms(boxes, scores, iou_threshold=0.5):
-    """
-    Perform Non-Maximum Suppression on a single class.
-
-    Args:
-        boxes: (N, 4) tensor of boxes in [xmin, ymin, xmax, ymax] format
-        scores: (N,) tensor of confidence scores
-        iou_threshold: IoU threshold for suppression (default: 0.5)
-
-    Returns:
-        (K,) tensor of indices to keep (sorted by descending score)
-    """
+    
     if boxes.numel() == 0:
         return torch.zeros(0, dtype=torch.long, device=boxes.device)
 
@@ -52,26 +31,8 @@ def nms(boxes, scores, iou_threshold=0.5):
 
     return torch.tensor(keep, dtype=torch.long, device=boxes.device)
 
-
 def per_class_nms(boxes, scores, labels, iou_threshold=0.5, score_threshold=0.05):
-    """
-    Perform per-class Non-Maximum Suppression.
-
-    Applies NMS independently for each class to avoid suppressing
-    detections of different classes that overlap.
-
-    Args:
-        boxes: (N, 4) tensor of boxes in [xmin, ymin, xmax, ymax] format
-        scores: (N,) tensor of confidence scores
-        labels: (N,) tensor of class labels (integer indices)
-        iou_threshold: IoU threshold for NMS (default: 0.5)
-        score_threshold: minimum confidence to keep (default: 0.05)
-
-    Returns:
-        keep_boxes: (K, 4) tensor of kept boxes
-        keep_scores: (K,) tensor of kept scores
-        keep_labels: (K,) tensor of kept labels
-    """
+    
     # Filter by confidence threshold first
     mask = scores > score_threshold
     boxes = boxes[mask]

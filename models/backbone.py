@@ -1,26 +1,8 @@
-"""
-ResNet-50 backbone for feature extraction.
-
-Implements the ResNet-50 architecture with Bottleneck blocks
-(1x1, 3x3, 1x1 convolutions with expansion=4). Outputs multi-scale
-feature maps at strides 8, 16, 32 for use with FPN.
-
-Optionally loads pretrained ImageNet weights from torchvision.
-"""
-
 import torch
 import torch.nn as nn
 
-
 class Bottleneck(nn.Module):
-    """
-    Bottleneck residual block for ResNet-50/101/152.
     
-    Structure:
-        input ──┬── Conv1x1 → BN → ReLU → Conv3x3 → BN → ReLU → Conv1x1 → BN ──┐
-                │                                                              │ (+)→ ReLU
-                └──── [optional 1x1 downsample] ───────────────────────────────┘
-    """
     expansion = 4
 
     def __init__(self, in_channels, out_channels, stride=1, downsample=None):
@@ -58,11 +40,8 @@ class Bottleneck(nn.Module):
         out = self.relu(out)
         return out
 
-
 class BasicBlock(nn.Module):
-    """
-    Basic residual block for ResNet-18/34.
-    """
+    
     expansion = 1
 
     def __init__(self, in_channels, out_channels, stride=1, downsample=None):
@@ -91,20 +70,7 @@ class BasicBlock(nn.Module):
         out = self.relu(out)
         return out
 
-
 class ResNet18Backbone(nn.Module):
-    """
-    ResNet-18 backbone that extracts multi-scale features.
-
-    Architecture (Blocks [2, 2, 2, 2]):
-        Stem:   Conv7x7(s=2) → BN → ReLU → MaxPool(s=2)    → stride 4
-        Layer1: 2x BasicBlock(64→64, s=1)                  → stride 4
-        Layer2: 2x BasicBlock(64→128, s=2)    [C3 output]  → stride 8
-        Layer3: 2x BasicBlock(128→256, s=2)   [C4 output]  → stride 16
-        Layer4: 2x BasicBlock(256→512, s=2)   [C5 output]  → stride 32
-
-    Returns (C3, C4, C5) feature maps for use with FPN.
-    """
 
     def __init__(self, pretrained=True):
         super().__init__()
@@ -192,20 +158,7 @@ class ResNet18Backbone(nn.Module):
 
         return c3, c4, c5
 
-
 class ResNet34Backbone(nn.Module):
-    """
-    ResNet-34 backbone that extracts multi-scale features.
-
-    Architecture (Blocks [3, 4, 6, 3]):
-        Stem:   Conv7x7(s=2) → BN → ReLU → MaxPool(s=2)    → stride 4
-        Layer1: 3x BasicBlock(64→64, s=1)                  → stride 4
-        Layer2: 4x BasicBlock(64→128, s=2)    [C3 output]  → stride 8
-        Layer3: 6x BasicBlock(128→256, s=2)   [C4 output]  → stride 16
-        Layer4: 3x BasicBlock(256→512, s=2)   [C5 output]  → stride 32
-
-    Returns (C3, C4, C5) feature maps for use with FPN/PANet.
-    """
 
     def __init__(self, pretrained=True):
         super().__init__()
@@ -293,20 +246,7 @@ class ResNet34Backbone(nn.Module):
 
         return c3, c4, c5
 
-
 class ResNet50Backbone(nn.Module):
-    """
-    ResNet-50 backbone that extracts multi-scale features.
-
-    Architecture (Blocks [3, 4, 6, 3]):
-        Stem:   Conv7x7(s=2) → BN → ReLU → MaxPool(s=2)    → stride 4
-        Layer1: 3x Bottleneck(64→256, s=1)                 → stride 4
-        Layer2: 4x Bottleneck(256→512, s=2)   [C3 output]  → stride 8
-        Layer3: 6x Bottleneck(512→1024, s=2)  [C4 output]  → stride 16
-        Layer4: 3x Bottleneck(1024→2048, s=2) [C5 output]  → stride 32
-
-    Returns (C3, C4, C5) feature maps for use with FPN.
-    """
 
     def __init__(self, pretrained=True):
         super().__init__()

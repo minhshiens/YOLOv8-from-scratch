@@ -1,17 +1,4 @@
 #!/usr/bin/env python3
-"""
-Training script for the FCOS object detector.
-
-Usage:
-    python train.py \
-        --train_data ./public/annotations/train.json \
-        --val_data ./public/annotations/val.json \
-        --image_dir ./public/train/images \
-        --val_image_dir ./public/val/images \
-        --checkpoint_dir ./models/
-
-Saves the best model (by val mAP@0.5) to <checkpoint_dir>/best.pth.
-"""
 
 import argparse
 import json
@@ -35,7 +22,7 @@ from utils.dataset import DetectionDataset, collate_fn
 from utils.nms import per_class_nms
 
 class ModelEMA:
-    """ Exponential Moving Average of model weights """
+    
     def __init__(self, model, decay=0.9999):
         self.ema = copy.deepcopy(model).eval()
         self.updates = 0
@@ -52,8 +39,6 @@ class ModelEMA:
                 if v.dtype.is_floating_point:
                     v *= d
                     v += (1 - d) * msd[k].detach()
-
-
 
 # ---------------------------------------------------------------------------
 # CLI arguments
@@ -99,13 +84,12 @@ def parse_args():
 
     return parser.parse_args()
 
-
 # ---------------------------------------------------------------------------
 # Training loop
 # ---------------------------------------------------------------------------
 
 def train_one_epoch(model, criterion, optimizer, ema, dataloader, device, epoch, multi_scale=True):
-    """Train for one epoch. Returns averaged loss metrics."""
+    
     model.train()
 
     running_loss = 0.0
@@ -167,18 +151,13 @@ def train_one_epoch(model, criterion, optimizer, ema, dataloader, device, epoch,
         'ctr': running_ctr / n,
     }
 
-
 # ---------------------------------------------------------------------------
 # Validation (inference + mAP evaluation)
 # ---------------------------------------------------------------------------
 
 @torch.no_grad()
 def validate(model, dataloader, device, conf_thresh=0.05, nms_thresh=0.5):
-    """
-    Run inference on validation set and format predictions.
-
-    Returns list of predictions in the required JSON format.
-    """
+    
     model.eval()
     strides = [8, 16, 32]
     classes = DetectionDataset.CLASSES
@@ -291,13 +270,8 @@ def validate(model, dataloader, device, conf_thresh=0.05, nms_thresh=0.5):
 
     return all_predictions
 
-
 def evaluate_predictions(val_data_path, pred_path, output_path):
-    """
-    Run the provided evaluation script to compute mAP@0.5.
-
-    Returns the mAP@0.5 score, or None if evaluation fails.
-    """
+    
     # Attempt to find evaluate_predictions.py dynamically
     script_dir = os.path.dirname(os.path.abspath(__file__))
     val_dir = os.path.dirname(os.path.abspath(val_data_path))
@@ -336,7 +310,6 @@ def evaluate_predictions(val_data_path, pred_path, output_path):
     except Exception as e:
         print(f'  [Eval] Exception: {e}')
         return None
-
 
 # ---------------------------------------------------------------------------
 # Main
@@ -514,7 +487,6 @@ def main():
     print(f'Best mAP@0.5: {best_map:.4f}')
     print(f'Best model: {os.path.join(args.checkpoint_dir, "best.pth")}')
     print(f'{"=" * 60}')
-
 
 if __name__ == '__main__':
     main()
