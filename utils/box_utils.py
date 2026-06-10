@@ -1,4 +1,5 @@
 import torch
+import math
 
 def compute_iou(boxes1, boxes2):
     
@@ -55,6 +56,60 @@ def compute_giou_loss(pred_boxes, target_boxes):
 
     # Loss = 1 - GIoU (mean over all pairs)
     return (1 - giou).mean()
+
+def compute_ciou_loss(pred_boxes, target_boxes):
+    """
+    Complete IoU Loss.
+    """
+    # Pred dimensions
+    w_pred = (pred_boxes[:, 2] - pred_boxes[:, 0]).clamp(min=1e-6)
+    h_pred = (pred_boxes[:, 3] - pred_boxes[:, 1]).clamp(min=1e-6)
+    pred_area = w_pred * h_pred
+    
+    # Target dimensions
+    w_target = (target_boxes[:, 2] - target_boxes[:, 0]).clamp(min=1e-6)
+    h_target = (target_boxes[:, 3] - target_boxes[:, 1]).clamp(min=1e-6)
+    target_area = w_target * h_target
+
+    # Intersection
+    inter_x1 = torch.max(pred_boxes[:, 0], target_boxes[:, 0])
+    inter_y1 = torch.max(pred_boxes[:, 1], target_boxes[:, 1])
+    inter_x2 = torch.min(pred_boxes[:, 2], target_boxes[:, 2])
+    inter_y2 = torch.min(pred_boxes[:, 3], target_boxes[:, 3])
+
+    inter_area = (inter_x2 - inter_x1).clamp(min=0) * \
+                 (inter_y2 - inter_y1).clamp(min=0)
+
+    # Union
+    union = pred_area + target_area - inter_area
+    iou = inter_area / union.clamp(min=1e-6)
+
+    # Enclosing box
+    enclose_x1 = torch.min(pred_boxes[:, 0], target_boxes[:, 0])
+    enclose_y1 = torch.min(pred_boxes[:, 1], target_boxes[:, 1])
+    enclose_x2 = torch.max(pred_boxes[:, 2], target_boxes[:, 2])
+    enclose_y2 = torch.max(pred_boxes[:, 3], target_boxes[:, 3])
+
+    # Diagonal length squared of enclosing box (c^2)
+    c2 = (enclose_x2 - enclose_x1)**2 + (enclose_y2 - enclose_y1)**2 + 1e-6
+
+    # Distance squared between centers (rho^2)
+    cx_pred = (pred_boxes[:, 0] + pred_boxes[:, 2]) / 2
+    cy_pred = (pred_boxes[:, 1] + pred_boxes[:, 3]) / 2
+    cx_target = (target_boxes[:, 0] + target_boxes[:, 2]) / 2
+    cy_target = (target_boxes[:, 1] + target_boxes[:, 3]) / 2
+    rho2 = (cx_pred - cx_target)**2 + (cy_pred - cy_target)**2
+
+    # Aspect ratio penalty (v)
+    v = (4 / (math.pi ** 2)) * torch.pow(torch.atan(w_target / h_target) - torch.atan(w_pred / h_pred), 2)
+    with torch.no_grad():
+        alpha = v / (1 - iou + v + 1e-6)
+
+    # CIoU
+    ciou = iou - (rho2 / c2) - alpha * v
+
+    # Loss = 1 - CIoU
+    return (1 - ciou).mean()
 
 def ltrb_to_xyxy(ltrb, points):
     

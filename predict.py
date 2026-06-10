@@ -27,7 +27,7 @@ def parse_args():
                         help='Path to model checkpoint')
     parser.add_argument('--img_size', type=int, default=416,
                         help='Input image size (must match training)')
-    parser.add_argument('--conf_thresh', type=float, default=0.1,
+    parser.add_argument('--conf_thresh', type=float, default=0.001,
                         help='Confidence threshold for filtering')
     parser.add_argument('--nms_thresh', type=float, default=0.5,
                         help='IoU threshold for NMS')
@@ -36,7 +36,7 @@ def parse_args():
     return parser.parse_args()
 
 @torch.no_grad()
-def predict_single_image(model, image_path, transform, device,
+def predict_single_image(model, image_path, base_img_size, device,
                          conf_thresh, nms_thresh):
     
     strides = [8, 16, 32]
@@ -49,18 +49,27 @@ def predict_single_image(model, image_path, transform, device,
     all_scores = []
     all_labels = []
 
-    # Test-Time Augmentation (TTA)
-    for flip in [False, True]:
-        if flip:
-            img_in = image.transpose(Image.FLIP_LEFT_RIGHT)
-        else:
-            img_in = image
+    # Test-Time Augmentation (TTA): Multi-Scale + Flips
+    scales = [0.8, 1.0, 1.2]
+    
+    for scale_factor in scales:
+        # Determine optimal size (multiple of 32)
+        target_size = int(base_img_size * scale_factor)
+        target_size = (target_size + 31) // 32 * 32
+        
+        transform = DetectionTransform(img_size=target_size, train=False)
 
-        # Apply transforms (resize + normalize)
-        empty_boxes = np.zeros((0, 4), dtype=np.float32)
-        empty_labels = np.array([], dtype=np.int64)
-        img_tensor, _, _, meta = transform(img_in, empty_boxes, empty_labels)
-        img_tensor = img_tensor.unsqueeze(0).to(device)  # (1, 3, H, W)
+        for flip in [False, True]:
+            if flip:
+                img_in = image.transpose(Image.FLIP_LEFT_RIGHT)
+            else:
+                img_in = image
+
+            # Apply transforms (resize + normalize)
+            empty_boxes = np.zeros((0, 4), dtype=np.float32)
+            empty_labels = np.array([], dtype=np.int64)
+            img_tensor, _, _, meta = transform(img_in, empty_boxes, empty_labels)
+            img_tensor = img_tensor.unsqueeze(0).to(device)  # (1, 3, H, W)
 
         # Forward pass
         predictions = model(img_tensor)
@@ -195,9 +204,6 @@ def main():
     print(f'Loaded model from {args.checkpoint}')
     print(f'Image size: {args.img_size}')
 
-    # ---- Transform (no augmentation for inference) ----
-    transform = DetectionTransform(img_size=args.img_size, train=False)
-
     # ---- Discover images ----
     image_dir = args.image_dir
     image_files = sorted([
@@ -220,7 +226,7 @@ def main():
         img_path = os.path.join(image_dir, img_file)
 
         det_boxes = predict_single_image(
-            model, img_path, transform, device,
+            model, img_path, args.img_size, device,
             args.conf_thresh, args.nms_thresh,
         )
 

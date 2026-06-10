@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from utils.box_utils import (
     generate_grid_points,
     ltrb_to_xyxy,
-    compute_giou_loss,
+    compute_ciou_loss,
 )
 
 class FocalLoss(nn.Module):
@@ -106,17 +106,17 @@ class FCOSLoss(nn.Module):
 
                 # ---- Regression + centerness loss (positive locations only) ----
                 if num_pos > 0:
-                    # Regression: GIoU loss
+                    # Regression: CIoU loss
                     pos_reg_pred = reg_flat[b][pos_mask]      # (P, 4) ltrb
                     pos_reg_target = reg_targets[pos_mask]     # (P, 4) ltrb
                     pos_points = points[pos_mask]              # (P, 2)
 
-                    # Convert ltrb to xyxy for GIoU computation
+                    # Convert ltrb to xyxy for CIoU computation
                     pred_boxes_xyxy = ltrb_to_xyxy(pos_reg_pred, pos_points)
                     target_boxes_xyxy = ltrb_to_xyxy(pos_reg_target, pos_points)
 
-                    reg_loss = compute_giou_loss(pred_boxes_xyxy, target_boxes_xyxy)
-                    total_reg_loss += reg_loss * num_pos  # GIoU returns mean
+                    reg_loss = compute_ciou_loss(pred_boxes_xyxy, target_boxes_xyxy)
+                    total_reg_loss += reg_loss * num_pos  # CIoU returns mean
 
                     # Centerness: BCE loss
                     pos_ctr_logits = ctr_flat[b][pos_mask].squeeze(-1)  # (P,)
@@ -165,7 +165,7 @@ class FCOSLoss(nn.Module):
         inside_mask = ltrb.min(dim=-1).values > 0  # (HW, N)
 
         # ---- Condition 2: Center Sampling (point must be near GT center) ----
-        radius = 2.5
+        radius = 1.5
         gt_cx = (gt_boxes[:, 0] + gt_boxes[:, 2]) / 2.0  # (N,)
         gt_cy = (gt_boxes[:, 1] + gt_boxes[:, 3]) / 2.0  # (N,)
         
