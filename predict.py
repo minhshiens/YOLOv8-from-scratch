@@ -27,7 +27,7 @@ def parse_args():
                         help='Path to model checkpoint')
     parser.add_argument('--img_size', type=int, default=416,
                         help='Input image size (must match training)')
-    parser.add_argument('--conf_thresh', type=float, default=0.001,
+    parser.add_argument('--conf_thresh', type=float, default=0.01,
                         help='Confidence threshold for filtering')
     parser.add_argument('--nms_thresh', type=float, default=0.5,
                         help='IoU threshold for NMS')
@@ -100,6 +100,14 @@ def predict_single_image(model, image_path, base_img_size, device,
                 keep = max_scores > conf_thresh
                 if not keep.any():
                     continue
+
+                # Top-k filter: cap candidates per FPN level to prevent slowdown
+                max_per_level = 1000
+                if keep.sum() > max_per_level:
+                    topk_vals, topk_idx = max_scores[keep].topk(max_per_level)
+                    keep_where = torch.where(keep)[0][topk_idx]
+                    keep = torch.zeros_like(keep)
+                    keep[keep_where] = True
 
                 # Decode boxes to xyxy
                 boxes = ltrb_to_xyxy(reg[keep], points[keep])
