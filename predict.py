@@ -10,7 +10,7 @@ from PIL import Image
 
 from models import FCOSDetector
 from utils.box_utils import generate_grid_points, ltrb_to_xyxy
-from utils.nms import per_class_nms
+from utils.nms import per_class_nms, weighted_boxes_fusion
 from utils.transforms import DetectionTransform
 
 CLASSES = ['person', 'car', 'dog', 'cat', 'chair']
@@ -45,9 +45,10 @@ def predict_single_image(model, image_path, base_img_size, device,
     image = Image.open(image_path).convert('RGB')
     orig_w, orig_h = image.size
 
-    all_boxes = []
-    all_scores = []
-    all_labels = []
+    # Collect predictions per TTA view for Weighted Boxes Fusion
+    views_boxes = []
+    views_scores = []
+    views_labels = []
 
     # Test-Time Augmentation (TTA): Multi-Scale + Flips
     scales = [0.8, 1.0, 1.2]
@@ -60,6 +61,10 @@ def predict_single_image(model, image_path, base_img_size, device,
         transform = DetectionTransform(img_size=target_size, train=False)
 
         for flip in [False, True]:
+            view_boxes = []
+            view_scores = []
+            view_labels = []
+
             if flip:
                 img_in = image.transpose(Image.FLIP_LEFT_RIGHT)
             else:
@@ -71,74 +76,78 @@ def predict_single_image(model, image_path, base_img_size, device,
             img_tensor, _, _, meta = transform(img_in, empty_boxes, empty_labels)
             img_tensor = img_tensor.unsqueeze(0).to(device)  # (1, 3, H, W)
 
-        # Forward pass
-        predictions = model(img_tensor)
+            # Forward pass
+            predictions = model(img_tensor)
 
-        for level_idx, (cls_logits, reg_pred, ctr_logits) in enumerate(predictions):
-            _, C, H, W = cls_logits.shape
-            stride = strides[level_idx]
+            for level_idx, (cls_logits, reg_pred, ctr_logits) in enumerate(predictions):
+                _, C, H, W = cls_logits.shape
+                stride = strides[level_idx]
 
-            # Generate grid points
-            points = generate_grid_points(H, W, stride, device=device)  # (HW, 2)
+                # Generate grid points
+                points = generate_grid_points(H, W, stride, device=device)  # (HW, 2)
 
-            # Decode outputs
-            cls_scores = cls_logits[0].sigmoid().permute(1, 2, 0).reshape(-1, C)
-            ctr_scores = ctr_logits[0].sigmoid().permute(1, 2, 0).reshape(-1, 1)
-            reg = reg_pred[0].permute(1, 2, 0).reshape(-1, 4)  # (HW, 4) ltrb
+                # Decode outputs
+                cls_scores = cls_logits[0].sigmoid().permute(1, 2, 0).reshape(-1, C)
+                ctr_scores = ctr_logits[0].sigmoid().permute(1, 2, 0).reshape(-1, 1)
+                reg = reg_pred[0].permute(1, 2, 0).reshape(-1, 4)  # (HW, 4) ltrb
 
-            # Centerness penalty
-            scores = cls_scores * (ctr_scores ** 2)
+                # Centerness penalty
+                scores = cls_scores * (ctr_scores ** 2)
 
-            max_scores, max_labels = scores.max(dim=1)
+                max_scores, max_labels = scores.max(dim=1)
 
-            # Filter by confidence
-            keep = max_scores > conf_thresh
-            if not keep.any():
-                continue
+                # Filter by confidence
+                keep = max_scores > conf_thresh
+                if not keep.any():
+                    continue
 
-            # Decode boxes to xyxy
-            boxes = ltrb_to_xyxy(reg[keep], points[keep])
+                # Decode boxes to xyxy
+                boxes = ltrb_to_xyxy(reg[keep], points[keep])
 
-            # Convert immediately to original image coordinates
-            boxes = boxes.cpu().float()
-            scale = meta['scale']
-            pad_x = meta['pad_x']
-            pad_y = meta['pad_y']
+                # Convert immediately to original image coordinates
+                boxes = boxes.cpu().float()
+                scale = meta['scale']
+                pad_x = meta['pad_x']
+                pad_y = meta['pad_y']
 
-            boxes[:, [0, 2]] = (boxes[:, [0, 2]] - pad_x) / scale
-            boxes[:, [1, 3]] = (boxes[:, [1, 3]] - pad_y) / scale
+                boxes[:, [0, 2]] = (boxes[:, [0, 2]] - pad_x) / scale
+                boxes[:, [1, 3]] = (boxes[:, [1, 3]] - pad_y) / scale
 
-            # If flipped, invert x coordinates
-            if flip:
-                x_min_old = boxes[:, 0].clone()
-                x_max_old = boxes[:, 2].clone()
-                boxes[:, 0] = orig_w - x_max_old
-                boxes[:, 2] = orig_w - x_min_old
+                # If flipped, invert x coordinates
+                if flip:
+                    x_min_old = boxes[:, 0].clone()
+                    x_max_old = boxes[:, 2].clone()
+                    boxes[:, 0] = orig_w - x_max_old
+                    boxes[:, 2] = orig_w - x_min_old
 
-            all_boxes.append(boxes.to(device))
-            all_scores.append(max_scores[keep])
-            all_labels.append(max_labels[keep])
+                view_boxes.append(boxes.to(device))
+                view_scores.append(max_scores[keep])
+                view_labels.append(max_labels[keep])
 
-    if not all_boxes:
-        return []
+            # Per-view Soft-NMS to clean up duplicates within each view
+            if view_boxes:
+                vb = torch.cat(view_boxes)
+                vs = torch.cat(view_scores)
+                vl = torch.cat(view_labels)
+                vb, vs, vl = per_class_nms(
+                    vb, vs, vl, iou_threshold=nms_thresh,
+                    score_threshold=conf_thresh, use_soft=True,
+                )
+                views_boxes.append(vb)
+                views_scores.append(vs)
+                views_labels.append(vl)
 
-    # Merge predictions from both views and all levels
-    all_boxes = torch.cat(all_boxes)
-    all_scores = torch.cat(all_scores)
-    all_labels = torch.cat(all_labels)
-
-    # Per-class NMS
-    keep_boxes, keep_scores, keep_labels = per_class_nms(
-        all_boxes, all_scores, all_labels,
-        iou_threshold=nms_thresh,
-        score_threshold=conf_thresh,
+    # Weighted Boxes Fusion across all TTA views
+    keep_boxes, keep_scores, keep_labels = weighted_boxes_fusion(
+        views_boxes, views_scores, views_labels,
+        iou_threshold=0.55, score_threshold=conf_thresh,
     )
 
-    if keep_boxes.numel() == 0:
+    if keep_boxes.shape[0] == 0:
         return []
 
     keep_boxes = keep_boxes.cpu().float()
-    
+
     # Clip to original image bounds
     keep_boxes[:, 0] = keep_boxes[:, 0].clamp(min=0, max=orig_w)
     keep_boxes[:, 1] = keep_boxes[:, 1].clamp(min=0, max=orig_h)
