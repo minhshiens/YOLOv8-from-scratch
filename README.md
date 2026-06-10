@@ -5,7 +5,7 @@ Mô hình Object Detection được xây dựng hoàn toàn từ đầu (from sc
 Khác với các thế hệ YOLO cũ dùng hộp neo (anchor-based), mô hình này dự đoán trực tiếp tọa độ hộp bao từ các điểm lưới (grid points) trên Feature Pyramid Network (FPN), kết hợp với Backbone ResNet-50 và nhánh Centerness Penalty để tối ưu hóa mAP. Mô hình dự đoán 5 lớp đối tượng: `person`, `car`, `dog`, `cat`, `chair`.
 
 ## Tính năng kỹ thuật nổi bật
-Toàn bộ mã nguồn được lập trình bằng PyTorch thuần túy (tuyệt đối không sử dụng các thư viện detection xây sẵn như Detectron2 hay model YOLO có sẵn của Ultralytics).
+Toàn bộ mã nguồn được lập trình bằng PyTorch thuần túy ( không sử dụng các thư viện detection xây sẵn như Detectron2 hay model YOLO có sẵn của Ultralytics).
 - **Mạng trích xuất đặc trưng (Backbone):** ResNet-50 kiến trúc nguyên bản (tự xây dựng các Bottleneck).
 - **Cổ chai đặc trưng (Neck):** Feature Pyramid Network (PANet) đa tỷ lệ nối các Feature map P3, P4, P5.
 - **Đầu dự đoán (Decoupled Head):** Tách biệt nhánh dự đoán phân lớp (Classification), hộp bao (Regression) và độ lệch tâm (Centerness) giúp giảm nhiễu.
