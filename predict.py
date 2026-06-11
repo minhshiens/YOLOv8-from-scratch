@@ -27,7 +27,7 @@ def parse_args():
                         help='Path to model checkpoint')
     parser.add_argument('--img_size', type=int, default=416,
                         help='Input image size (must match training)')
-    parser.add_argument('--conf_thresh', type=float, default=0.01,
+    parser.add_argument('--conf_thresh', type=float, default=0.1,
                         help='Confidence threshold for filtering')
     parser.add_argument('--nms_thresh', type=float, default=0.5,
                         help='IoU threshold for NMS')

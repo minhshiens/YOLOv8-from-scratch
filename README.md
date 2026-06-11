@@ -135,3 +135,63 @@ python ./public/tools/evaluate_predictions.py \
 ```
 
 Lệnh này sẽ tự động so sánh các hộp bao bạn dự đoán với nhãn gốc (ground truth), tính toán chỉ số mAP và xuất kết quả báo cáo chi tiết ra file `score.json`.
+
+---
+
+## 7. Chấm điểm bằng Docker
+
+Sử dụng Docker để chấm bài trong môi trường chuẩn hóa. Dockerfile được cung cấp sẵn và đặt ngang hàng với các thư mục trong repo.
+
+### Yêu cầu hệ thống
+
+- **Docker** (≥ 20.10) với **NVIDIA Container Toolkit** (hỗ trợ `--gpus all`)
+- **GPU NVIDIA** có CUDA ≥ 12.6
+
+### Quy trình chấm
+
+**Bước 1: Build Docker image**
+
+```bash
+docker build -t object-detection-exam:2026 .
+```
+
+**Bước 2: Chạy suy luận trong container**
+
+```bash
+cd my_submission
+
+mkdir -p grading_outputs
+
+docker run --rm --gpus all \
+  -v "$PWD/public/val/images:/exam/val_images:ro" \
+  -v "$PWD:/workspace" \
+  -v "$PWD/grading_outputs:/exam/outputs" \
+  object-detection-exam:2026 \
+  python predict.py \
+    --image_dir /exam/val_images \
+    --output /exam/outputs/val_predictions.json
+```
+
+**Giải thích các volume mount:**
+| Mount | Mục đích |
+|-------|---------|
+| `$PWD/public/val/images:/exam/val_images:ro` | Ảnh validation (chỉ đọc) |
+| `$PWD:/workspace` | Mã nguồn + trọng số mô hình |
+| `$PWD/grading_outputs:/exam/outputs` | Thư mục ghi kết quả dự đoán |
+
+**Bước 3: Chấm điểm mAP**
+
+```bash
+python public/tools/evaluate_predictions.py \
+  --ground_truth public/annotations/val.json \
+  --predictions grading_outputs/val_predictions.json \
+  --output grading_outputs/val_score.json
+```
+
+Kết quả điểm số sẽ được ghi vào file `grading_outputs/val_score.json`.
+
+### Lưu ý
+
+- Mô hình tự động phát hiện GPU trong container (`torch.cuda.is_available()`), nếu không có GPU sẽ fallback về CPU.
+- Checkpoint mặc định trỏ đến `./models/best.pth` — file này được mount vào container qua volume `/workspace`.
+- Backbone khởi tạo với `pretrained_backbone=False` nên **không cần kết nối Internet** trong container.
