@@ -1,6 +1,7 @@
 public/
 models/*.pth
+*.pth
 __pycache__/
 *.json
-!predictions.json
-!score.json
+./predictions.json
+./score.json            

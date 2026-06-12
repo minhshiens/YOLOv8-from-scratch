@@ -34,7 +34,8 @@ RUN pip install --upgrade pip && pip install \
     timm \
     transformers \
     einops \
-    safetensors
+    safetensors \
+    huggingface-hub
 
 RUN mkdir -p /workspace /exam/outputs
 

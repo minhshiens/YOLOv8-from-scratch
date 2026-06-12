@@ -7,11 +7,16 @@ import time
 import numpy as np
 import torch
 from PIL import Image
+from huggingface_hub import hf_hub_download
 
 from models import FCOSDetector
 from utils.box_utils import generate_grid_points, ltrb_to_xyxy
 from utils.nms import per_class_nms, weighted_boxes_fusion
 from utils.transforms import DetectionTransform
+
+# ---- Hugging Face model repository ----
+HF_REPO_ID = "minhshiens/YOLOv8_from_scratch"
+HF_WEIGHT_FILENAME = "best.pth"
 
 CLASSES = ['person', 'car', 'dog', 'cat', 'chair']
 
@@ -200,9 +205,24 @@ def main():
     ).to(device)
 
     if not os.path.exists(args.checkpoint):
-        print(f'ERROR: Checkpoint not found: {args.checkpoint}')
-        print('Please train the model first with train.py')
-        return
+        print(f'Checkpoint not found locally: {args.checkpoint}')
+        print(f'Downloading from Hugging Face: {HF_REPO_ID}/{HF_WEIGHT_FILENAME} ...')
+        # Ensure the directory exists
+        ckpt_dir = os.path.dirname(args.checkpoint)
+        if ckpt_dir:
+            os.makedirs(ckpt_dir, exist_ok=True)
+        # Download from Hugging Face Hub (cached automatically)
+        downloaded_path = hf_hub_download(
+            repo_id=HF_REPO_ID,
+            filename=HF_WEIGHT_FILENAME,
+            local_dir=ckpt_dir or '.',
+            local_dir_use_symlinks=False,
+        )
+        # If hf_hub_download placed the file at a different name, copy it
+        if os.path.abspath(downloaded_path) != os.path.abspath(args.checkpoint):
+            import shutil
+            shutil.copy2(downloaded_path, args.checkpoint)
+        print(f'Download complete: {args.checkpoint}')
 
     checkpoint = torch.load(args.checkpoint, map_location=device,
                             weights_only=False)

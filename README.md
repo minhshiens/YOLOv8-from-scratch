@@ -56,11 +56,17 @@ pip install -r requirements.txt
 
 ## 2. Tải Dữ liệu và Trọng số (Hugging Face)
 
-Do kích thước dữ liệu và file trọng số lớn, chúng được lưu trữ trên nền tảng Hugging Face. Bạn cần tải chúng về trước khi chạy mô hình.
+Do kích thước dữ liệu và file trọng số lớn, chúng được lưu trữ trên nền tảng Hugging Face.
 
-**Cách: Tải thủ công qua trình duyệt**
-1. Link bộ dữ liệu (`public/`): [Hugging Face Dataset](https://huggingface.co/minhshiens/YOLOv8_from_scratch/tree/main) -> Tải về và giải nén thư mục `public` vào thư mục gốc của project.
-2. Link trọng số (`best.pth`): [Hugging Face Model](https://huggingface.co/minhshiens/YOLOv8_from_scratch/tree/main) -> Tải file `best.pth` và bỏ vào thư mục `./models/`.
+### Trọng số mô hình (`best.pth`) — Tự động tải
+
+**Bạn KHÔNG cần tải trọng số thủ công.** Khi chạy `predict.py`, nếu file `./models/best.pth` chưa tồn tại, chương trình sẽ **tự động tải** trọng số từ Hugging Face về đúng vị trí. Quá trình tải chỉ diễn ra một lần duy nhất (lần chạy đầu tiên).
+
+> Nếu muốn tải thủ công, bạn vẫn có thể tải file `best.pth` từ [Hugging Face Model](https://huggingface.co/minhshiens/YOLOv8_from_scratch/tree/main) và đặt vào thư mục `./models/`.
+
+### Bộ dữ liệu (`public/`) — Tải thủ công
+
+1. Link bộ dữ liệu (`public/`): [Hugging Face Dataset](https://huggingface.co/minhshiens/YOLOv8_from_scratch/tree/main) -> Tải file `final_public.zip`, giải nén thư mục `public` vào thư mục gốc của project.
 
 ---
 
@@ -193,5 +199,5 @@ Kết quả điểm số sẽ được ghi vào file `grading_outputs/val_score.
 ### Lưu ý
 
 - Mô hình tự động phát hiện GPU trong container (`torch.cuda.is_available()`), nếu không có GPU sẽ fallback về CPU.
-- Checkpoint mặc định trỏ đến `./models/best.pth` — file này được mount vào container qua volume `/workspace`.
-- Backbone khởi tạo với `pretrained_backbone=False` nên **không cần kết nối Internet** trong container.
+- Checkpoint mặc định trỏ đến `./models/best.pth`. Nếu file này đã có sẵn trong volume `/workspace`, mô hình sẽ dùng trực tiếp. Nếu không, chương trình sẽ **tự động tải** trọng số từ Hugging Face (cần kết nối Internet trong container).
+- Backbone khởi tạo với `pretrained_backbone=False` nên chỉ cần Internet cho lần tải trọng số đầu tiên.
