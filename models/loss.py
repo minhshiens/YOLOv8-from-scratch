@@ -47,7 +47,7 @@ class FCOSLoss(nn.Module):
 
     STRIDES = [8, 16, 32]
 
-    def __init__(self, num_classes=5, reg_weight=1.0):
+    def __init__(self, num_classes=5, reg_weight=1.5):
         super().__init__()
         self.num_classes = num_classes
         self.reg_weight = reg_weight

@@ -32,7 +32,7 @@ def parse_args():
                         help='Path to model checkpoint')
     parser.add_argument('--img_size', type=int, default=416,
                         help='Input image size (must match training)')
-    parser.add_argument('--conf_thresh', type=float, default=0.1,
+    parser.add_argument('--conf_thresh', type=float, default=0.01,
                         help='Confidence threshold for filtering')
     parser.add_argument('--nms_thresh', type=float, default=0.5,
                         help='IoU threshold for NMS')
@@ -56,7 +56,7 @@ def predict_single_image(model, image_path, base_img_size, device,
     views_labels = []
 
     # Test-Time Augmentation (TTA): Multi-Scale + Flips
-    scales = [0.8, 1.0, 1.2]
+    scales = [0.75, 0.875, 1.0, 1.125, 1.25]
     
     for scale_factor in scales:
         # Determine optimal size (multiple of 32)
@@ -96,8 +96,8 @@ def predict_single_image(model, image_path, base_img_size, device,
                 ctr_scores = ctr_logits[0].sigmoid().permute(1, 2, 0).reshape(-1, 1)
                 reg = reg_pred[0].permute(1, 2, 0).reshape(-1, 4)  # (HW, 4) ltrb
 
-                # Centerness penalty
-                scores = cls_scores * (ctr_scores ** 2)
+                # Centerness penalty (1.5 balances precision/recall better than 2.0)
+                scores = cls_scores * (ctr_scores ** 1.5)
 
                 max_scores, max_labels = scores.max(dim=1)
 
