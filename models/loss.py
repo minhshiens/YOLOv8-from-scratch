@@ -221,9 +221,9 @@ class FCOSLoss(nn.Module):
             # near 0 when it's near the box edge
             pos_l, pos_t, pos_r, pos_b = pos_ltrb.unbind(dim=-1)
 
-            lr_ratio = torch.min(pos_l, pos_r) / torch.max(pos_l, pos_r).clamp(min=1e-6)
-            tb_ratio = torch.min(pos_t, pos_b) / torch.max(pos_t, pos_b).clamp(min=1e-6)
-            centerness = torch.sqrt(lr_ratio * tb_ratio)
+            lr_ratio = torch.min(pos_l, pos_r) / torch.max(pos_l, pos_r).clamp(min=1e-4)
+            tb_ratio = torch.min(pos_t, pos_b) / torch.max(pos_t, pos_b).clamp(min=1e-4)
+            centerness = torch.sqrt((lr_ratio * tb_ratio).clamp(min=0.0))
 
             ctr_targets[pos_idx] = centerness
 

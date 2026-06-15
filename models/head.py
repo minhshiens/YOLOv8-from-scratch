@@ -144,8 +144,9 @@ class FCOSHead(nn.Module):
             # Regression branch
             reg_feat = self.reg_subnet(feature)
             # Use exp() and multiply by stride as in the original FCOS paper
-            # This prevents dead gradients from ReLU and helps predict reasonable initial sizes
-            reg_pred = torch.exp(self.scales[level_idx] * self.reg_pred(reg_feat)) * strides[level_idx]
+            # Clamp the exponent to [-8.0, 8.0] to prevent exp() overflow/underflow under FP16 (AMP)
+            reg_val = self.scales[level_idx] * self.reg_pred(reg_feat)
+            reg_pred = torch.exp(torch.clamp(reg_val, min=-8.0, max=8.0)) * strides[level_idx]
 
             # Centerness branch (uses regression features)
             ctr_logits = self.centerness(reg_feat)
