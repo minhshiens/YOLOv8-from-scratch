@@ -68,8 +68,10 @@ def parse_args():
                         help='Number of training epochs')
     parser.add_argument('--batch_size', type=int, default=16,
                         help='Batch size for training')
-    parser.add_argument('--lr', type=float, default=0.0005,
-                        help='Initial learning rate (for AdamW)')
+    parser.add_argument('--lr', type=float, default=None,
+                        help='Initial learning rate (default: 0.0001 for adamw, 0.01 for sgd)')
+    parser.add_argument('--optimizer', type=str, default='adamw', choices=['sgd', 'adamw'],
+                        help='Optimizer to use (sgd or adamw)')
     parser.add_argument('--img_size', type=int, default=640,
                         help='Input image size (square)')
     parser.add_argument('--num_workers', type=int, default=4,
@@ -399,25 +401,37 @@ def main():
     # ---- Loss ----
     criterion = FCOSLoss(num_classes=5)
 
-    # ---- Optimizer: AdamW (separate weight decay for stability) ----
-    decay_params = []
-    nodecay_params = []
-    for name, param in model.named_parameters():
-        if not param.requires_grad:
-            continue
-        # Do not apply weight decay to 1D tensors (biases, GroupNorm scale/bias) and learnable scale parameters
-        if len(param.shape) == 1 or name.endswith('.bias') or '.scales.' in name:
-            nodecay_params.append(param)
-        else:
-            decay_params.append(param)
+    # ---- Resolve default learning rate dynamically ----
+    if args.lr is None:
+        args.lr = 0.0001 if args.optimizer == 'adamw' else 0.01
 
-    optimizer = torch.optim.AdamW(
-        [
-            {'params': decay_params, 'weight_decay': 0.05},
-            {'params': nodecay_params, 'weight_decay': 0.0}
-        ],
-        lr=args.lr,
-    )
+    # ---- Optimizer ----
+    if args.optimizer == 'adamw':
+        decay_params = []
+        nodecay_params = []
+        for name, param in model.named_parameters():
+            if not param.requires_grad:
+                continue
+            # Do not apply weight decay to 1D tensors (biases, GroupNorm scale/bias) and learnable scale parameters
+            if len(param.shape) == 1 or name.endswith('.bias') or '.scales.' in name:
+                nodecay_params.append(param)
+            else:
+                decay_params.append(param)
+
+        optimizer = torch.optim.AdamW(
+            [
+                {'params': decay_params, 'weight_decay': 0.05},
+                {'params': nodecay_params, 'weight_decay': 0.0}
+            ],
+            lr=args.lr,
+        )
+    else:  # SGD
+        optimizer = torch.optim.SGD(
+            model.parameters(),
+            lr=args.lr,
+            momentum=0.9,
+            weight_decay=1e-4,
+        )
 
     # ---- LR Scheduler: cosine annealing (applied after warmup) ----
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(

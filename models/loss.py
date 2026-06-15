@@ -223,7 +223,7 @@ class FCOSLoss(nn.Module):
 
             lr_ratio = torch.min(pos_l, pos_r) / torch.max(pos_l, pos_r).clamp(min=1e-4)
             tb_ratio = torch.min(pos_t, pos_b) / torch.max(pos_t, pos_b).clamp(min=1e-4)
-            centerness = torch.sqrt((lr_ratio * tb_ratio).clamp(min=0.0))
+            centerness = torch.sqrt((lr_ratio * tb_ratio).clamp(min=1e-8))
 
             ctr_targets[pos_idx] = centerness
 
