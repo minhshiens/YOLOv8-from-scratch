@@ -68,7 +68,7 @@ def parse_args():
                         help='Number of training epochs')
     parser.add_argument('--batch_size', type=int, default=16,
                         help='Batch size for training')
-    parser.add_argument('--lr', type=float, default=0.001,
+    parser.add_argument('--lr', type=float, default=0.0005,
                         help='Initial learning rate (for AdamW)')
     parser.add_argument('--img_size', type=int, default=640,
                         help='Input image size (square)')
@@ -133,7 +133,7 @@ def train_one_epoch(model, criterion, optimizer, ema, dataloader, device, epoch,
             
             # Gradient clipping (unscale first for proper clipping)
             scaler.unscale_(optimizer)
-            nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
+            nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
             
             scaler.step(optimizer)
             scaler.update()
@@ -143,7 +143,7 @@ def train_one_epoch(model, criterion, optimizer, ema, dataloader, device, epoch,
             
             optimizer.zero_grad()
             losses['total'].backward()
-            nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
+            nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
             optimizer.step()
 
         if ema is not None:
@@ -399,11 +399,24 @@ def main():
     # ---- Loss ----
     criterion = FCOSLoss(num_classes=5)
 
-    # ---- Optimizer: AdamW ----
+    # ---- Optimizer: AdamW (separate weight decay for stability) ----
+    decay_params = []
+    nodecay_params = []
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        # Do not apply weight decay to 1D tensors (biases, GroupNorm scale/bias) and learnable scale parameters
+        if len(param.shape) == 1 or name.endswith('.bias') or '.scales.' in name:
+            nodecay_params.append(param)
+        else:
+            decay_params.append(param)
+
     optimizer = torch.optim.AdamW(
-        model.parameters(),
+        [
+            {'params': decay_params, 'weight_decay': 0.05},
+            {'params': nodecay_params, 'weight_decay': 0.0}
+        ],
         lr=args.lr,
-        weight_decay=0.05,
     )
 
     # ---- LR Scheduler: cosine annealing (applied after warmup) ----
